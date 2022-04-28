@@ -42,14 +42,23 @@ class Duration {
 	}
 }
 
+class Pitch {
+
+	constructor(fret,string) {
+		this.fret = fret;
+		this.string = string;
+	}
+	
+}
+
 /* Notes */
 class Note {
-	// Set fret = null for rest
-	constructor(fret) {
-		this.fret = fret;
+	// Set pitches = null for rest
+	//
+	constructor(pitches) {
+		this.pithces = pitches;
 		this.duration = null;
 		this.properties = [];
-		
 	}
 }
 
@@ -82,4 +91,18 @@ class Tab {
 /*
  * Parsing
  */
+function parse_ultimate_guitar(html) {
+	
+}
 
+
+
+//https://stackoverflow.com/questions/15581059/how-to-add-text-to-an-existing-div-with-jquery
+$(function () {
+	console.log("test1")
+	$('#convert').click(function () {
+	  $('#content').after('<p>Text after the button</p>');
+	  console.log("test3")
+	});
+  });
+  console.log("test2")
