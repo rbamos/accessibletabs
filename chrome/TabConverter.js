@@ -2,6 +2,13 @@
  * 
  */
 
+/* Parsing constants */
+//UG
+selector_tab_container = "code > pre"
+class_comment = "_3rlxz"
+class_tablature="_2jIGi"
+
+
 /*
  ***************************
  * Tab object and components
@@ -91,8 +98,8 @@ class Tab {
 /*
  * Parsing
  */
-function parse_ultimate_guitar(html) {
-	
+function parse_ultimate_guitar() {
+	$("code.")
 }
 
 
