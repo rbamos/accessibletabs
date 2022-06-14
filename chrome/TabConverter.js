@@ -98,8 +98,12 @@ class Tab {
 /*
  * Parsing
  */
-function parse_ultimate_guitar() {
-	$("code.")
+function parse_ultimate_guitar(root) {
+	var measures = [];
+	var tab_container = $("code > pre",root);
+	tab_container.children().forEach(element => {
+		measures.push
+	});
 }
 
 
