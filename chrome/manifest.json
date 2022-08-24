@@ -1,0 +1,21 @@
+{
+    "manifest_version": 3,
+    "name": "Accessible tabs",
+    "description": "Compatibility between screen readers and tabs",
+    "version": "1.0",
+    "action": {
+        "default_icon": "guitar.png",
+        "default_popup": "popup.html",
+        "default_title": "My custom google page!"
+    },
+    "permissions": ["activeTab", "scripting"],
+
+    "content_scripts": [
+        {
+          "matches": ["https://*.ultimate-guitar.com/*"],
+          "match_origin_as_fallback": true,
+          "js": ["TabConverter.js","jquery-3.6.0.min.js"]
+        }
+    ],
+    "host_permissions": ["<all_urls>"]
+}
