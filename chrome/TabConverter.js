@@ -24,23 +24,25 @@ const NoteProperty = {
   palm_mute: 'Palm mute',
   pinch_harmonic: 'Pinch harmonic',
   natural_harmonic: 'Natural harmonic',
-  legato: 'legato',
-  vibrato: 'vibrato',
-  muted: 'muted',
-  staccato: 'staccato',
-  tied: 'tied',
-  let_ring: 'let ring',
-  up_strum: 'up strum',
-  down_strum: 'down strum',
-  accented: 'accented',
-  heavily_accented: 'heavily accented',
-  tapped: 'tapped',
-  tremolo: 'tremolo',
-  ghost_note: 'ghost_note',
-  slide_up: "slide_up",
-  slide_down: "slide_down",
-  slide_up_into: "slide_up_into", //slide when there is no prior note
-  slide_down_into: "slide_down_into"
+  legato: 'Legato',
+  vibrato: 'Vibrato',
+  bend: 'Bend',
+  muted: 'Muted',
+  staccato: 'Staccato',
+  dead_note: 'Dead note',
+  tied: 'Tied',
+  let_ring: 'Let ring',
+  up_strum: 'Up strum',
+  down_strum: 'Down strum',
+  accented: 'Accented',
+  heavily_accented: 'Heavily accented',
+  tapped: 'Tapped',
+  tremolo: 'Tremolo',
+  ghost_note: 'Ghost_note',
+  slide_up: "Slide up",
+  slide_down: "Slide down",
+  slide_up_into: "Slide up into", //slide when there is no prior note
+  slide_down_into: "Slide down into"
 }
 
 class Bend {
@@ -75,6 +77,10 @@ class Note {
 		this.duration = null;
 		this.properties = [];
 	}
+
+	addProperty = function(p) {
+		this.properties.push(p);
+	}
 }
 
 /* Chord */
@@ -103,8 +109,8 @@ class Measure {
 }
 
 class Line {
-	constructor(){
-		this.measures = [];
+	constructor(measures){
+		this.measures = measures;
 	}
 }
 
@@ -122,7 +128,7 @@ class Tab {
  * Parsing
  */
 function parse_ultimate_guitar(root) {
-	let measures = [];
+	let music_lines = [];
 	let tab_container = $("code > pre",root);
 	console.log(tab_container.children());
 	tab_container.children().each((idx,element) => {
@@ -132,12 +138,11 @@ function parse_ultimate_guitar(root) {
 		let measure = null;
 		switch(element.attr("class")){
 			case class_comment:
-				if(!element.text){
+				if(!rtrim(element.text())){
 					break;
 				}
-				comment = new Comment(element.text);
-				console.log(`Adding ${element.text}`)
-				measures.push(comment);
+				comment = new Comment(rtrim(element.text()));
+				music_lines.push(comment);
 				break;
 			case class_tablature: 
 				let lines = [];
@@ -180,6 +185,11 @@ function parse_ultimate_guitar(root) {
 					}
 				}
 
+				let note_line_length = line_length;
+				note_rows.forEach((val) => {
+					note_line_length = Math.min(note_line_length,val.length);
+				});
+
 				
 				//Read this line
 				let note_texts = note_rows.map(row_text => "");
@@ -189,16 +199,23 @@ function parse_ultimate_guitar(root) {
 				let have_note = false;
 				let measure = new Measure([]);
 				let line = []; //The line is a list of measures
-				for(let col = 0; col < line_length; col++) {
+				for(let col = notes_start; col < note_line_length; col++) {
 
 					//Check if we need to flush notes
-					if(can_flush_notes) {	
+					if(can_flush_notes) {
+						all_dashes = true;
 						for(let row = 0; row < note_rows.length; row++) {
 							note_val = note_rows[row][col];
 							if('1234567890'.includes(note_val)){
 								flush_notes = true;
-								break;		
+								break;
 							}
+							if(note_val != "-") {
+								all_dashes = false;
+							}
+						}
+						if(all_dashes) {
+							flush_notes = true;
 						}
 					}
 
@@ -233,7 +250,17 @@ function parse_ultimate_guitar(root) {
 					}
 				}
 
-				measure.push.apply(line);
+				//Finish/flush incomplete reads
+				if(note_texts.some(function(element, index, ar){return element != ""})){
+					measure.notes.push(parse_notes(note_texts));
+				}
+				if(measure.notes.length != 0){
+					line.push(measure);
+				}
+
+				console.log(line);
+
+				music_lines.push(new Line(line));
 
 				console.log(lines);
 
@@ -242,15 +269,104 @@ function parse_ultimate_guitar(root) {
 				break;
 		}
 	});
+	console.log(music_lines);
 }
-
-note_parse_regex = 
 //Note texts should be an array of strings
-function parse_notes(tuning,note_texts) {
+//Returns a chord with the notes
+function parse_notes(note_texts) {
+	notes = [];
 	for(let row = 0; row < note_texts.length; row++) {
-		note_texts[row]
-		new Pitch(row) 
+		
+		//Don't try to make a note for empty rows
+		if(note_texts[row].length == 0) {continue;}
+
+		/*
+		 * Groups:
+		 * 0: Slide into
+		 * 1: Ghost note/artificial harmonic
+		 * 2: Fret/dead note
+		 * 3: See 1
+		 * 4: Vibrato
+		 * 5: Slide out
+		 * 6: legato
+		 * 7: Bend
+		 */
+		match = /o?([\\\/]?)([\(\[]?)(\d+|x)([\)\]]?)(~+)?([\\\/s]?)([hp]?)(b?)/.exec(note_texts[row]);
+		if(!match) {
+			console.log("Failed to parse note text");
+			console.log(note_texts);
+			console.log(row);
+		}
+		groups = match.slice(1);
+
+		//Is dead note or fret?
+		switch(groups[2]){
+			case "x":
+				fret = null;
+				break;
+			default:
+				fret = parseInt(groups[2]);
+		}
+		let pitch = new Pitch(fret,row+1);
+		let note = new Note(pitch);
+
+		if(fret == null) {
+			note.addProperty(NoteProperty.dead_note);
+		}
+
+		switch(groups[0]){
+			case "\\":
+				note.addProperty(NoteProperty.slide_down_into);
+				break;
+			case "/":
+				note.addProperty(NoteProperty.slide_up_into);
+				break;
+		}
+		switch(groups[1]){
+			case "(":
+				if(groups[3] != ")"){
+					console.error(`Badly matched open parens with ${groups[3]}`)
+				} else {
+					note.addProperty(NoteProperty.ghost_note);
+				}
+				break;
+			case "[":
+				if(groups[3] != "]"){
+					console.error(`Badly matched open bracket with ${groups[3]}`)
+				} else {
+					note.addProperty(NoteProperty.pinch_harmonic);
+				}
+				break;
+		}
+		switch(groups[4]){
+			case "": //No match
+				break;
+			default: //Any number of tildes
+				note.addProperty(NoteProperty.vibrato);
+				break;
+		}
+		switch(groups[5]){
+			case "\\":
+				note.addProperty(NoteProperty.slide_down);
+				break;
+			case "/":
+				note.addProperty(NoteProperty.slide_up);
+				break;
+		}
+		switch(groups[6]){
+			case "h":
+			case "p":
+				note.addProperty(NoteProperty.legato);
+				break;
+		}
+		switch(groups[7]){
+			case "b":
+				note.addProperty(NoteProperty.bend);
+				break;
+		}
+		notes.push(note);
 	}
+	return new Chord(notes);
 }
 
 function parse_page() {
