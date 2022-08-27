@@ -11,8 +11,6 @@ class_tablature="fsG7q"
 base_note_names = ["A","a","B","b","C","c","D","d","E","e","F","f","G","g"];
 all_note_names = ["Ab","A","A#","ab","a","a#","Bb","B","B#","bb","b","b#","Cb","C","C#","cb","c","c#","Db","D","D#","db","d","d#","Eb","E","E#","eb","e","e#","Fb","F","F#","fb","f","f#","Gb","G","G#","gb","g","g#"];
 
-
-
 /*
  ***************************
  * Tab object and components
@@ -384,8 +382,7 @@ function parse_ultimate_guitar(root) {
 	});
 	//console.log(music_lines);
 	tab = new Tab(music_lines);
-	$("section.OnD3d.kmZt1").html(`${tab.toString()}\n${$("section.OnD3d.kmZt1").html()}`);
-	//console.log(tab.toString());
+	$("section.OnD3d.kmZt1").html(`${tab.toString()}`);
 	return tab;
 }
 //Note texts should be an array of strings
