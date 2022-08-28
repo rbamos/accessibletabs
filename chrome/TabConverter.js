@@ -535,7 +535,12 @@ function numberAdjective(n) {
 
 function parse_page() {
 	console.log("Parse page");
-	parse_ultimate_guitar($("body"));
+	try{
+		parse_ultimate_guitar($("body"));
+	} catch (e) {
+		alert("Failed to parse page, error in console");
+		throw e;
+	}
 }
 
 console.log("TabConverter");
