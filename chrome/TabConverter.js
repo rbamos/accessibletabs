@@ -7,6 +7,7 @@
 selector_tab_container = "code > pre"
 class_comment = "y68er"
 class_tablature="fsG7q"
+class_chord_line = "span.fciXY._Oy28"
 
 base_note_names = ["A","a","B","b","C","c","D","d","E","e","F","f","G","g"];
 all_note_names = ["Ab","A","A#","ab","a","a#","Bb","B","B#","bb","b","b#","Cb","C","C#","cb","c","c#","Db","D","D#","db","d","d#","Eb","E","E#","eb","e","e#","Fb","F","F#","fb","f","f#","Gb","G","G#","gb","g","g#"];
@@ -170,7 +171,7 @@ class Comment {
 	}
 
 	toString = function() {
-		match = /^\s*\[(.*?)\]\s*$/.exec(this.text)
+		let match = /^\s*\[(.*?)\]\s*$/.exec(this.text)
 		if(match != null) {
 			return `<h2>${match[1]}</h2>`;
 		}
@@ -207,6 +208,26 @@ class Line {
 	}
 }
 
+class NamedChord {
+	constructor(chord_name){
+		this.chord_name = chord_name;
+	}
+
+	toString = function() {
+		return `(${namedChordToString(this.chord_name)})`;
+	}
+}
+
+class LyricPart {
+	constructor(lyric_part) {
+		this.lyric_part = lyric_part;
+	}
+
+	toString = function() {
+		return `"${this.lyric_part}"`;
+	}
+}
+
 class ChordLyrics {
 	//Chord lyrics: list of alternating chord & lyric
 	constructor(chord_lyrics) {
@@ -214,7 +235,8 @@ class ChordLyrics {
 	}
 
 	toString = function() {
-
+		let s = stringAndJoin(this.chord_lyrics," ")
+		return `<p>${s}<p/>`;
 	}
 }
 
@@ -231,6 +253,7 @@ class Tab {
 		this.lines.forEach((val,index,array) => {
 			s += `${val.toString()}`;
 		});
+		s += "<h1>END TAB</h1>";
 		return s;
 	}
 }
@@ -253,14 +276,28 @@ function parse_ultimate_guitar(root) {
 		console.log(element);
 		element = $(element);
 		switch(element.attr("class")){
+			//Comment
 			case class_comment:
-				if(!rtrim(element.text())){
+				let text = rtrim(element.text())
+				if(!text){
 					break;
 				}
-				comment = new Comment(rtrim(element.text()));
-				music_lines.push(comment);
+				//Chord line without lyrics
+				if(element.has(class_chord_line).length) {
+					let namedChords = [];
+					let matches = text.matchAll(/(^|[ \|\%]+)([a-zA-Z0-9\#]+)/g);
+					for(const groups of matches) {
+						let chord_name = groups[2];
+						namedChords.push(chord_name);
+					};
+					music_lines.push(new ChordLyrics(namedChords));
+				} else {
+					comment = new Comment(text);
+					music_lines.push(comment);
+				}
 				break;
-			case class_tablature: 
+			//Tabs/chords
+			case class_tablature:
 				let lines = [];
 				element.children().each((idx2,element2) => {
 					lines.push(rtrim($(element2).text()));
@@ -271,127 +308,150 @@ function parse_ultimate_guitar(root) {
 					line_length = Math.max(line_length,val.length);
 				});
 
-				tuning_cols_end = 0;
-				//Find note columns
-				find_tuning_cols: for(let col = 0; col < line_length; col++) {
+				//With 2 or fewer lines, it's probably chords, otherwise it's tabs
+				//A single line will go under the comment class
+				if(lines.length <= 2) {
+					/* Groups:
+					* 1. Whitespace
+					* 2. Chord name
+					*/
+					let lyrics_and_chords = []
+					let matches = lines[0].matchAll(/(^| +)([a-zA-Z0-9\#]+)/g);
+					let last_offset = 0;
+					let offset_mod = 0; //Length of last chord name
+					for(const groups of matches) {
+						let offset = groups[1].length + offset_mod; //Whitespace + last chord
+						let chord_name = groups[2];
+						let lyric_text = lines[1].substring(last_offset,last_offset+offset);
+						offset_mod = groups[2].length;
+						console.log(last_offset,last_offset+offset,lyric_text);
+						last_offset += offset;
+						if(lyric_text.length > 0)
+							lyrics_and_chords.push(new LyricPart(lyric_text));
+						lyrics_and_chords.push(new NamedChord(chord_name));
+					};
+					let lyric_text = lines[1].substring(last_offset);
+					lyrics_and_chords.push(new LyricPart(lyric_text));
+					music_lines.push(new ChordLyrics(lyrics_and_chords));
+				} else {
+					tuning_cols_end = 0;
+					//Find note columns
+					find_tuning_cols: for(let col = 0; col < line_length; col++) {
+						for(let row = 0; row < lines.length; row++) {
+							//If the text is | or -, we probably found the start of the 
+							if(lines[row][col] == "|" || lines[row][col] == "-"){
+								break find_tuning_cols;
+							}
+						}
+						tuning_cols_end++;
+					}
+	
+					notes_start = tuning_cols_end;
+					note_rows = [];
+					comment_rows = [];
+					//Figure out which lines are notes and which are comments
 					for(let row = 0; row < lines.length; row++) {
-						//If the text is | or -, we probably found the start of the 
-						if(lines[row][col] == "|" || lines[row][col] == "-"){
-							break find_tuning_cols;
-						}
-					}
-					tuning_cols_end++;
-				}
-
-				notes_start = tuning_cols_end;
-				note_rows = [];
-				comment_rows = [];
-				//Figure out which lines are notes and which are comments
-				for(let row = 0; row < lines.length; row++) {
-					after_tuning = lines[row][tuning_cols_end];
-					if(after_tuning == "|" || after_tuning == "-"){
-						if(note_rows.length == 0) {
-							if(after_tuning == "|"){
-								notes_start++;
+						after_tuning = lines[row][tuning_cols_end];
+						if(after_tuning == "|" || after_tuning == "-"){
+							if(note_rows.length == 0) {
+								if(after_tuning == "|"){
+									notes_start++;
+								}
 							}
-						}
-						note_rows.push(lines[row]);
-					} else {
-						comment_rows.push(lines[row]);
-					}
-				}
-
-				let note_line_length = line_length;
-				note_rows.forEach((val) => {
-					note_line_length = Math.min(note_line_length,val.length);
-				});
-
-				
-				//Read this line
-				let note_texts = note_rows.map(row_text => "");
-				let flush_notes = false;
-				let flush_measure = false;
-				let can_flush_notes = false;
-				let have_note = false;
-				let measure = new Measure([],measure_number++);
-				let line = []; //The line is a list of measures
-				for(let col = notes_start; col < note_line_length; col++) {
-
-					//Check if we need to flush notes
-					if(can_flush_notes) {
-						all_dashes = true;
-						for(let row = 0; row < note_rows.length; row++) {
-							note_val = note_rows[row][col];
-							if('1234567890'.includes(note_val)){
-								flush_notes = true;
-								break;
-							}
-							if(note_val != "-") {
-								all_dashes = false;
-							}
-						}
-						if(all_dashes) {
-							flush_notes = true;
+							note_rows.push(lines[row]);
+						} else {
+							comment_rows.push(lines[row]);
 						}
 					}
-
-					if(flush_notes) {
-						measure.chords.push(parse_chord(note_texts));
-						note_texts = note_rows.map(row_text => "");
-						have_note = false;
-					}
-
-					can_flush_notes = have_note; //Flush if we don't hit any numbers this column AND we have hit a number before
-					flush_notes = false;
-					flush_measure = false; //Flush measure if we hit a measure marker
-					for(let row = 0; row < note_rows.length; row++) {
-						note_val = note_rows[row][col];
-						if(note_val == "-") {
-							continue;
-						}
-						if(note_val == "|"){ //measure marker
-							flush_measure = true;
-							break;
-						}
-						if('1234567890'.includes(note_val)){
-							can_flush_notes = false;
-							have_note = true;
-						}
-						note_texts[row] += note_val;
-					}
+	
+					let note_line_length = line_length;
+					note_rows.forEach((val) => {
+						note_line_length = Math.min(note_line_length,val.length);
+					});
+	
 					
-					if(flush_measure) {
-						//Check if we have remaining notes
-						if(note_texts.some(function(element, index, ar){return element != ""})){
+					//Read this line
+					let note_texts = note_rows.map(row_text => "");
+					let flush_notes = false;
+					let flush_measure = false;
+					let can_flush_notes = false;
+					let have_note = false;
+					let measure = new Measure([],measure_number++);
+					let line = []; //The line is a list of measures
+					for(let col = notes_start; col < note_line_length; col++) {
+	
+						//Check if we need to flush notes
+						if(can_flush_notes) {
+							all_dashes = true;
+							for(let row = 0; row < note_rows.length; row++) {
+								note_val = note_rows[row][col];
+								if('1234567890'.includes(note_val)){
+									flush_notes = true;
+									break;
+								}
+								if(note_val != "-") {
+									all_dashes = false;
+								}
+							}
+							if(all_dashes) {
+								flush_notes = true;
+							}
+						}
+	
+						if(flush_notes) {
 							measure.chords.push(parse_chord(note_texts));
 							note_texts = note_rows.map(row_text => "");
 							have_note = false;
 						}
-						line.push(measure);
-						measure = new Measure([],measure_number++);
+	
+						can_flush_notes = have_note; //Flush if we don't hit any numbers this column AND we have hit a number before
+						flush_notes = false;
+						flush_measure = false; //Flush measure if we hit a measure marker
+						for(let row = 0; row < note_rows.length; row++) {
+							note_val = note_rows[row][col];
+							if(note_val == "-") {
+								continue;
+							}
+							if(note_val == "|"){ //measure marker
+								flush_measure = true;
+								break;
+							}
+							if('1234567890'.includes(note_val)){
+								can_flush_notes = false;
+								have_note = true;
+							}
+							note_texts[row] += note_val;
+						}
+						
+						if(flush_measure) {
+							//Check if we have remaining notes
+							if(note_texts.some(function(element, index, ar){return element != ""})){
+								measure.chords.push(parse_chord(note_texts));
+								note_texts = note_rows.map(row_text => "");
+								have_note = false;
+							}
+							line.push(measure);
+							measure = new Measure([],measure_number++);
+						}
 					}
+	
+					//Finish/flush incomplete reads
+					if(note_texts.some(function(element, index, ar){return element != ""})){
+						measure.chords.push(parse_chord(note_texts));
+					}
+					if(measure.chords.length != 0){
+						line.push(measure);
+					}
+	
+					console.log(line);
+	
+					music_lines.push(new Line(line,line_number++));
 				}
-
-				//Finish/flush incomplete reads
-				if(note_texts.some(function(element, index, ar){return element != ""})){
-					measure.chords.push(parse_chord(note_texts));
-				}
-				if(measure.chords.length != 0){
-					line.push(measure);
-				}
-
-				console.log(line);
-
-				music_lines.push(new Line(line,line_number++));
-
-				//console.log(lines);
-
-				console.log("Line length: " + line_length);
 
 				break;
 		}
 	});
-	//console.log(music_lines);
+	console.log(music_lines);
 	tab = new Tab(music_lines);
 	$("section.OnD3d.kmZt1").html(`${tab.toString()}`);
 	return tab;
@@ -556,7 +616,7 @@ function parse_page() {
 
 //Expects a string, NOT a Chord object
 //FIXME verify that this is all correct; e.g. is it C7sus4 or Csus4 7?
-function chordNamer(chordName) {
+function namedChordToString(chordName) {
 	/* Groups:
 	* 1: Root
 	* 2. Sharp?
@@ -573,7 +633,9 @@ function chordNamer(chordName) {
 	* 13. Inversion?
 	* 14. Inversion note
 	*/
-	matches = /^([a-gA-G]) ?(?:(#)|(b))? ?(?:(m|min)(M|Maj))? ?([0-9]+)? ?(?:(dim)|(aug)|(sus([0-9])*))? ? ?(add([0-9])+)? ?(\/ ?([a-gA-G]))?$/g.match(chordName);
+	let matches = /^([a-gA-G]) ?(?:(#)|(b))? ?(?:(m|min)|(M|Maj))? ?([0-9]+)? ?(?:(dim)|(aug)|(sus([0-9])*))? ? ?(add([0-9])+)? ?(\/ ?([a-gA-G]))?$/g.exec(chordName);
+	console.log(chordName);
+	console.log(matches);
 	//Root
 	let s = `${matches[1].toUpperCase()}`;
 
@@ -622,6 +684,8 @@ function chordNamer(chordName) {
 		//FIXME is "over" the best way to read an inversion
 		s += ` inverted over ${matches[14]}`;
 	}
+
+	return s;
 }
 
 console.log("TabConverter");
