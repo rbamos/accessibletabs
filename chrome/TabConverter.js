@@ -207,6 +207,17 @@ class Line {
 	}
 }
 
+class ChordLyrics {
+	//Chord lyrics: list of alternating chord & lyric
+	constructor(chord_lyrics) {
+		this.chord_lyrics = chord_lyrics;
+	}
+
+	toString = function() {
+
+	}
+}
+
 class Tab {
 	constructor(lines) {
 		this.lines = lines; //Can be a measure or a comment
@@ -540,6 +551,76 @@ function parse_page() {
 	} catch (e) {
 		alert("Failed to parse page, error in console");
 		throw e;
+	}
+}
+
+//Expects a string, NOT a Chord object
+//FIXME verify that this is all correct; e.g. is it C7sus4 or Csus4 7?
+function chordNamer(chordName) {
+	/* Groups:
+	* 1: Root
+	* 2. Sharp?
+	* 3. Flat?
+	* 4. Minor?
+	* 5. Major?
+	* 6. Highest scale degree (e.g. 7/9/etc)
+	* 7. Diminished?
+	* 8. Augmented?
+	* 9. Suspended?
+	* 10. Suspended added note
+	* 11. Addition?
+	* 12. Addition added note
+	* 13. Inversion?
+	* 14. Inversion note
+	*/
+	matches = /^([a-gA-G]) ?(?:(#)|(b))? ?(?:(m|min)(M|Maj))? ?([0-9]+)? ?(?:(dim)|(aug)|(sus([0-9])*))? ? ?(add([0-9])+)? ?(\/ ?([a-gA-G]))?$/g.match(chordName);
+	//Root
+	let s = `${matches[1].toUpperCase()}`;
+
+	//Sharp/flat?
+	if(matches[2] != undefined) {
+		s += " sharp";
+	} else if(matches[3] != undefined) {
+		s += " flat";
+	}
+
+	//Major/minor
+	if(matches[4] != undefined) {
+		s += " minor";
+	} else if(matches[5] != undefined) {
+		s += " major";
+	}
+
+	//Highest scale degree e.g. 7/9/13
+	if(matches[6] != undefined) {
+		s += ` ${matches[6]}`;
+	}
+
+	//diminished/augmented/suspended
+	if(matches[7] != undefined) {
+		s += " diminished";
+	} else if(matches[8] != undefined) {
+		s += " augmented";
+	} else if(matches[9] != undefined) {
+		//Is there a better way to communicate a susX chord than "susX"?
+		if(matches[10].length != 0) {
+			s += ` ${matches[9]}`;
+		} else {
+			s += " suspended";
+		}
+	}
+
+	//addX
+	//technically we could not capture this group but let's keep it simple
+	if(matches[11] != undefined) {
+		s += ` add ${matches[12]}`;
+	}
+
+	//Inversion
+	//Same here...
+	if(matches[11] != undefined) {
+		//FIXME is "over" the best way to read an inversion
+		s += ` inverted over ${matches[14]}`;
 	}
 }
 
